@@ -10,6 +10,10 @@
     <link rel="preconnect" href="https://esm.sh" crossorigin>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+      // Prevent 'process is not defined' error in browser environments (like Vercel production)
+      window.process = window.process || { env: {} };
+    </script>
     <style>
         :root {
           --safe-area-inset-top: env(safe-area-inset-top);
@@ -56,7 +60,6 @@
 
         .active-scale:active { transform: scale(0.97); }
         
-        /* Smooth transitions for tab switching */
         .page-transition {
           animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }

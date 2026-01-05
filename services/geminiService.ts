@@ -3,9 +3,16 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { MonthlyBias, Asset, Trade, BiasType, GroundingSource } from "../types";
 import { ASSETS } from "../constants";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Lazy initialization helper to prevent ReferenceErrors at boot time
+const getAI = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    console.warn("API_KEY is missing from environment variables.");
+  }
+  return new GoogleGenAI({ apiKey: apiKey || '' });
+};
 
-// In-memory cache for the current session to speed up repeat views
+// In-memory cache for the current session
 const intelligenceCache: Record<string, string> = {};
 
 export const geminiService = {
@@ -16,6 +23,7 @@ export const geminiService = {
     const cacheKey = `explain-${bias.id}`;
     if (intelligenceCache[cacheKey]) return intelligenceCache[cacheKey];
 
+    const ai = getAI();
     const prompt = `
       Act as a senior global macro strategist.
       Analyze the following monthly fundamental bias for ${bias.asset}:
@@ -49,6 +57,7 @@ export const geminiService = {
     const cacheKey = `feedback-${trade.id}`;
     if (intelligenceCache[cacheKey]) return intelligenceCache[cacheKey];
 
+    const ai = getAI();
     const prompt = `
       Act as a professional macro trading coach.
       A trader took the following trade:
@@ -79,6 +88,7 @@ export const geminiService = {
    * Synthesizes the macro data specifically for the LAST MONTH plus absolute latest news.
    */
   async fetchLatestMacroData(): Promise<MonthlyBias[]> {
+    const ai = getAI();
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
     const lastMonthName = d.toLocaleString('default', { month: 'long' });
@@ -88,8 +98,8 @@ export const geminiService = {
 
     const prompt = `
       Analyze global macroeconomic conditions as of ${today}.
-      Focus on ${lastMonthName} ${lastYear} bias and latest news.
-      Return JSON array for: ${ASSETS.join(', ')}.
+      Focus on ${lastMonthName} ${lastYear} bias and latest news for: ${ASSETS.join(', ')}.
+      Return JSON array.
     `;
 
     try {
