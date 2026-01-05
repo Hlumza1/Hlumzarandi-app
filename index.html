@@ -11,7 +11,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
-      // Prevent 'process is not defined' error in browser environments (like Vercel production)
+      // Polyfill for process.env which is injected by Vite at build time via define
       window.process = window.process || { env: {} };
     </script>
     <style>

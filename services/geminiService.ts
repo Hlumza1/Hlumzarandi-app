@@ -5,13 +5,36 @@ import { ASSETS, INITIAL_BIASES } from "../constants";
 
 const getAI = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.error("HLUMZARANDI: API_KEY is missing. Ensure it is set in Vercel Environment Variables.");
+  if (!apiKey || apiKey === 'undefined') {
+    console.error("HLUMZARANDI: API_KEY is missing. App will default to static data.");
+    return null;
   }
-  return new GoogleGenAI({ apiKey: apiKey || '' });
+  return new GoogleGenAI({ apiKey });
 };
 
 const intelligenceCache: Record<string, string> = {};
+
+/**
+ * Helper to extract JSON from text that might contain markdown or conversational filler.
+ * Especially useful when using Grounding tools which tend to be conversational.
+ */
+function extractJson(text: string): any {
+  try {
+    // Try direct parse first
+    return JSON.parse(text);
+  } catch (e) {
+    // Try to find a JSON array or object structure using regex
+    const jsonMatch = text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch (innerE) {
+        console.error("Failed to parse extracted JSON block", innerE);
+      }
+    }
+    throw new Error("Could not find valid JSON in AI response");
+  }
+}
 
 export const geminiService = {
   async explainBias(bias: MonthlyBias): Promise<string> {
@@ -19,6 +42,8 @@ export const geminiService = {
     if (intelligenceCache[cacheKey]) return intelligenceCache[cacheKey];
 
     const ai = getAI();
+    if (!ai) return "Intelligence engine offline (Check API Key).";
+
     const prompt = `
       Act as a senior global macro strategist.
       Analyze the following monthly fundamental bias for ${bias.asset}:
@@ -50,6 +75,8 @@ export const geminiService = {
     if (intelligenceCache[cacheKey]) return intelligenceCache[cacheKey];
 
     const ai = getAI();
+    if (!ai) return "Audit module offline.";
+
     const prompt = `
       Act as a professional macro trading coach.
       A trader took the following trade:
@@ -78,8 +105,9 @@ export const geminiService = {
 
   async fetchLatestMacroData(): Promise<MonthlyBias[]> {
     const ai = getAI();
+    if (!ai) return INITIAL_BIASES;
+
     const d = new Date();
-    // Use current or previous month based on date
     const monthName = d.toLocaleString('default', { month: 'long' });
     const year = d.getFullYear();
     const monthValue = `${year}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -89,12 +117,10 @@ export const geminiService = {
       Perform a deep-dive search on current global macroeconomic conditions as of ${today}.
       Specifically determine the monthly fundamental bias (BULLISH, BEARISH, or NEUTRAL) for: ${ASSETS.join(', ')}.
       
-      Focus on:
-      1. Latest Central Bank meetings (Fed, ECB, BoJ, BoE).
-      2. Recent Inflation data (CPI/PCE).
-      3. Geopolitical catalysts.
-      
-      Return a valid JSON array of objects.
+      Requirements:
+      1. Check Latest Central Bank meetings (Fed, ECB, BoJ, BoE).
+      2. Check Recent Inflation data (CPI/PCE) and Employment reports.
+      3. Return ONLY a valid JSON array of objects. No other text.
     `;
 
     try {
@@ -136,9 +162,9 @@ export const geminiService = {
         },
       });
 
-      const parsedBiases = JSON.parse(response.text || '[]');
+      const rawText = response.text || '';
+      const parsedBiases = extractJson(rawText);
       
-      // Extract URLs from grounding metadata as per instructions
       const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
       const sources: GroundingSource[] = groundingChunks
         .filter((c: any) => c.web)
@@ -147,7 +173,9 @@ export const geminiService = {
           uri: c.web.uri
         }));
 
-      if (parsedBiases.length === 0) throw new Error("Empty bias array from AI");
+      if (!Array.isArray(parsedBiases) || parsedBiases.length === 0) {
+        throw new Error("No bias data found in intelligence synthesis.");
+      }
 
       return parsedBiases.map((b: any) => ({
         ...b,
@@ -158,7 +186,7 @@ export const geminiService = {
       }));
     } catch (error) {
       console.error("AI Data Fetch Error:", error);
-      // If AI completely fails, return initial constants to keep app usable
+      // Fail gracefully to initial constants so the UI doesn't break
       return INITIAL_BIASES;
     }
   }
