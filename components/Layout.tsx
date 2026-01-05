@@ -18,11 +18,11 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, isSy
   ];
 
   const d = new Date();
-  d.setMonth(d.getMonth() - 1);
   const activeMonthName = d.toLocaleString('default', { month: 'long', year: 'numeric' }).toUpperCase();
+  const fullDateStr = d.toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' });
 
   const formatLastSync = (time: number | null) => {
-    if (!time) return "Sync Pending";
+    if (!time) return "Sync Required";
     const date = new Date(time);
     return `Synced ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
   };
@@ -35,15 +35,18 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, isSy
           <div className="w-7 h-7 bg-emerald-500 rounded flex items-center justify-center shadow-lg shadow-emerald-500/20">
             <span className="text-emerald-950 font-black text-xs italic">H</span>
           </div>
-          <h1 className="text-sm font-bold tracking-tight text-white uppercase italic">
-            <span className="techno-animate">hlumzarandi</span>
-          </h1>
+          <div className="flex flex-col">
+            <h1 className="text-sm font-bold tracking-tight text-white uppercase italic leading-none">
+              <span className="techno-animate">hlumzarandi</span>
+            </h1>
+            <span className="text-[7px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">{fullDateStr}</span>
+          </div>
         </div>
         
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-end mr-1">
             <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest leading-none">
-              {isSyncing ? 'Syncing Factory...' : 'Source: Factory.com'}
+              {isSyncing ? 'Accessing Factory.com...' : 'ForexFactory Grounded'}
             </span>
             <span className={`text-[10px] font-bold ${isSyncing ? 'text-amber-500' : 'text-emerald-500'} mono leading-none mt-0.5`}>
               {isSyncing ? 'Processing' : formatLastSync(lastSyncTime)}
@@ -61,7 +64,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab, isSy
           <div className="flex items-center justify-between mb-2">
             <div>
               <h2 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em]">{activeTab}</h2>
-              <p className="text-[8px] text-emerald-500/60 font-bold uppercase tracking-widest mt-0.5 italic">{activeMonthName} DATA</p>
+              <p className="text-[8px] text-emerald-500/60 font-bold uppercase tracking-widest mt-0.5 italic">{activeMonthName} INTELLIGENCE</p>
             </div>
             <div className="h-0.5 flex-1 ml-4 bg-slate-800/50"></div>
           </div>

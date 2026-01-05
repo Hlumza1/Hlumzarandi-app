@@ -4,9 +4,13 @@ import { Trade, MonthlyBias, Asset, BiasType, Alignment, Direction } from '../ty
 import { INITIAL_BIASES } from '../constants';
 import { factoryService } from '../services/factoryService';
 
-const TRADES_KEY = 'macro_journal_trades';
-const BIASES_KEY = 'macro_journal_biases_cache';
-const SYNC_KEY = 'macro_journal_last_sync';
+const TRADES_KEY = 'macro_journal_trades_v2';
+// Include Year-Month in the cache key to force fresh data on month roll-over
+const getBiasKey = () => {
+  const now = new Date();
+  return `macro_journal_biases_${now.getFullYear()}_${now.getMonth() + 1}`;
+};
+const SYNC_KEY = 'macro_journal_last_sync_v2';
 
 export function useStore() {
   const [trades, setTrades] = useState<Trade[]>(() => {
@@ -15,8 +19,23 @@ export function useStore() {
   });
 
   const [biases, setBiases] = useState<MonthlyBias[]>(() => {
-    const cached = localStorage.getItem(BIASES_KEY);
-    return cached ? JSON.parse(cached) : INITIAL_BIASES;
+    const key = getBiasKey();
+    const cached = localStorage.getItem(key);
+    if (cached) {
+      try {
+        const parsed: MonthlyBias[] = JSON.parse(cached);
+        const now = new Date();
+        const currentMonthValue = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+        
+        // Final sanity check on month value
+        if (parsed.length > 0 && parsed[0].month === currentMonthValue) {
+          return parsed;
+        }
+      } catch (e) {
+        console.warn("Stale bias cache discarded.");
+      }
+    }
+    return INITIAL_BIASES;
   });
 
   const [isSyncing, setIsSyncing] = useState(false);
@@ -33,20 +52,20 @@ export function useStore() {
       const latestData = await factoryService.getLatestData();
       if (latestData && latestData.length > 0) {
         setBiases(latestData);
-        localStorage.setItem(BIASES_KEY, JSON.stringify(latestData));
+        localStorage.setItem(getBiasKey(), JSON.stringify(latestData));
         const now = Date.now();
         setLastSyncTime(now);
         localStorage.setItem(SYNC_KEY, now.toString());
       }
     } catch (err) {
-      console.error("Failed to sync macro data:", err);
+      console.error("Macro Sync Failed:", err);
     } finally {
       setIsSyncing(false);
     }
   }, [isSyncing]);
 
   useEffect(() => {
-    // Refresh data in background on every mount
+    // Aggressive sync on mount to ensure user always sees latest from the prompt context
     syncWithFactory();
 
     const handleVisibilityChange = () => {

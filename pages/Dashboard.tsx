@@ -16,11 +16,6 @@ const Dashboard: React.FC<DashboardProps> = ({ biases, trades, onRefresh, isSync
   const alignedCount = trades.filter(t => t.alignment === Alignment.ALIGNED).length;
   const alignmentRate = trades.length > 0 ? (alignedCount / trades.length) * 100 : 0;
 
-  const d = new Date();
-  d.setMonth(d.getMonth() - 1);
-  const lastMonthShort = d.toLocaleString('default', { month: 'short' });
-  const lastYearShort = d.getFullYear().toString().slice(-2);
-
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-8">
       {/* Terminal Access Quick Action */}
@@ -96,7 +91,7 @@ const Dashboard: React.FC<DashboardProps> = ({ biases, trades, onRefresh, isSync
           >
              <div className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`}></div>
              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none">
-              {isSyncing ? 'Syncing...' : `Sync ${lastMonthShort} ${lastYearShort}`}
+              {isSyncing ? 'Syncing...' : 'Sync Intelligence'}
              </span>
           </button>
         </div>

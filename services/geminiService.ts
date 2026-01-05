@@ -5,8 +5,8 @@ import { ASSETS, INITIAL_BIASES } from "../constants";
 
 const getAI = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === 'undefined') {
-    console.error("HLUMZARANDI: API_KEY is missing. App will default to static data.");
+  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
+    console.error("HLUMZARANDI: API_KEY is invalid or missing.");
     return null;
   }
   return new GoogleGenAI({ apiKey });
@@ -14,16 +14,11 @@ const getAI = () => {
 
 const intelligenceCache: Record<string, string> = {};
 
-/**
- * Helper to extract JSON from text that might contain markdown or conversational filler.
- * Especially useful when using Grounding tools which tend to be conversational.
- */
 function extractJson(text: string): any {
   try {
-    // Try direct parse first
     return JSON.parse(text);
   } catch (e) {
-    // Try to find a JSON array or object structure using regex
+    // Attempt to find any JSON structure if the model was conversational
     const jsonMatch = text.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
     if (jsonMatch) {
       try {
@@ -32,7 +27,7 @@ function extractJson(text: string): any {
         console.error("Failed to parse extracted JSON block", innerE);
       }
     }
-    throw new Error("Could not find valid JSON in AI response");
+    throw new Error("Invalid intelligence format received.");
   }
 }
 
@@ -42,64 +37,35 @@ export const geminiService = {
     if (intelligenceCache[cacheKey]) return intelligenceCache[cacheKey];
 
     const ai = getAI();
-    if (!ai) return "Intelligence engine offline (Check API Key).";
+    if (!ai) return "Engine offline.";
 
-    const prompt = `
-      Act as a senior global macro strategist.
-      Analyze the following monthly fundamental bias for ${bias.asset}:
-      Bias: ${bias.bias} (${bias.confidence}% confidence)
-      Drivers: ${bias.drivers.map(d => `${d.title}: ${d.description}`).join(', ')}
-      Central Bank: ${bias.centralBankStance}
-      Inflation: ${bias.inflationTrend}
-      
-      Provide a concise, professional summary explaining the directional context for a serious trader. 
-      DO NOT predict price targets. DO NOT give entry/exit signals.
-    `;
+    const prompt = `Explain the monthly macro bias for ${bias.asset} in 2 sentences. Bias is ${bias.bias}. Drivers: ${bias.drivers.map(d => d.title).join(', ')}.`;
 
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt,
       });
-      const result = response.text || "Unable to generate macro context.";
+      const result = response.text || "Analysis unavailable.";
       intelligenceCache[cacheKey] = result;
       return result;
     } catch (error) {
-      console.error("AI Explain Error:", error);
-      return "Contextual analysis temporarily unavailable.";
+      return "Context synthesis error.";
     }
   },
 
   async getTradeFeedback(trade: Trade): Promise<string> {
-    const cacheKey = `feedback-${trade.id}`;
-    if (intelligenceCache[cacheKey]) return intelligenceCache[cacheKey];
-
     const ai = getAI();
     if (!ai) return "Audit module offline.";
-
-    const prompt = `
-      Act as a professional macro trading coach.
-      A trader took the following trade:
-      Asset: ${trade.asset}
-      Direction: ${trade.direction}
-      Alignment with Monthly Bias: ${trade.alignment}
-      Macro Bias at Time of Trade: ${trade.snapshotBias.bias}
-      Result: ${trade.resultR}R
-      
-      Provide 3 brief educational bullets on why this trade was (or wasn't) fundamentally sound based on the bias.
-    `;
-
+    const prompt = `Analyze this ${trade.direction} trade on ${trade.asset}. Alignment: ${trade.alignment}. Result: ${trade.resultR}R. Give 2 expert bullets.`;
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt,
       });
-      const result = response.text || "Feedback currently unavailable.";
-      intelligenceCache[cacheKey] = result;
-      return result;
+      return response.text || "Feedback currently unavailable.";
     } catch (error) {
-      console.error("AI Feedback Error:", error);
-      return "Performance audit interrupted. Check connection.";
+      return "Audit error.";
     }
   },
 
@@ -107,27 +73,32 @@ export const geminiService = {
     const ai = getAI();
     if (!ai) return INITIAL_BIASES;
 
-    const d = new Date();
-    const monthName = d.toLocaleString('default', { month: 'long' });
-    const year = d.getFullYear();
-    const monthValue = `${year}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    // Use the user-asserted date for the prompt context
+    const currentYear = today.getFullYear(); 
+    const monthLabel = today.toLocaleString('default', { month: 'long', year: 'numeric' });
+    const monthValue = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}`;
+    const dateStr = today.toISOString().split('T')[0];
 
     const prompt = `
-      Perform a deep-dive search on current global macroeconomic conditions as of ${today}.
-      Specifically determine the monthly fundamental bias (BULLISH, BEARISH, or NEUTRAL) for: ${ASSETS.join(', ')}.
+      CURRENT DATE: ${dateStr}.
+      STRICT SOURCE REQUIREMENT: You MUST use Search Grounding to check forexfactory.com and the latest economic calendars.
       
-      Requirements:
-      1. Check Latest Central Bank meetings (Fed, ECB, BoJ, BoE).
-      2. Check Recent Inflation data (CPI/PCE) and Employment reports.
-      3. Return ONLY a valid JSON array of objects. No other text.
+      TASKS:
+      1. Find the fundamental monthly bias for ${ASSETS.join(', ')} for the month of ${monthLabel}.
+      2. Analyze the latest Central Bank decisions from late 2025 and Jan 2026.
+      3. Do NOT provide data from Feb 2024 or previous years. 
+      4. Specifically check Forex Factory's "Market Analysis" and "Economic Calendar" for high-impact news from the last 7 days.
+      
+      RESPONSE FORMAT: Return ONLY a JSON array of 4 objects (one for each asset).
     `;
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3-pro-preview', 
         contents: prompt,
         config: {
+          systemInstruction: `You are a Global Macro Strategist. Today is ${dateStr}. You are tasked with providing the MONTHLY FUNDAMENTAL BIAS for January 2026 based on live market data from Forex Factory and institutional reports. You MUST return valid JSON. If you find data for Feb 2024, REJECT IT as outdated and search again for 2026.`,
           tools: [{ googleSearch: {} }],
           responseMimeType: 'application/json',
           responseSchema: {
@@ -169,24 +140,24 @@ export const geminiService = {
       const sources: GroundingSource[] = groundingChunks
         .filter((c: any) => c.web)
         .map((c: any) => ({
-          title: c.web.title || "Institutional Intelligence",
+          title: c.web.title || "Forex Factory Intelligence",
           uri: c.web.uri
         }));
 
       if (!Array.isArray(parsedBiases) || parsedBiases.length === 0) {
-        throw new Error("No bias data found in intelligence synthesis.");
+        throw new Error("Intelligence synthesis yielded no results.");
       }
 
       return parsedBiases.map((b: any) => ({
         ...b,
-        id: `auto-${b.asset}-${monthValue}-${Date.now()}`,
+        id: `sync-${b.asset}-${monthValue}-${Date.now()}`,
         month: monthValue,
-        validityPeriod: b.validityPeriod || `${monthName} ${year}`,
+        validityPeriod: b.validityPeriod || `${monthLabel}`,
         sources: sources.length > 0 ? sources : undefined
       }));
     } catch (error) {
-      console.error("AI Data Fetch Error:", error);
-      // Fail gracefully to initial constants so the UI doesn't break
+      console.error("Macro Sync Error:", error);
+      // Ensure we don't return old Feb 2024 data if it fails
       return INITIAL_BIASES;
     }
   }
