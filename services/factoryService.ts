@@ -11,19 +11,15 @@ export const factoryService = {
    * to synthesize the "latest data" using real-time grounding.
    */
   async getLatestData(): Promise<MonthlyBias[]> {
-    console.log("Syncing with Factory.com...");
-    
     try {
-      // Attempt to hit the requested domain
-      // We use a relatively short timeout to not hang the app
+      // In a real vercel deployment, factory.com might be a placeholder
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
       const response = await fetch(FACTORY_API_URL, {
         signal: controller.signal,
         headers: {
-          "Accept": "application/json",
-          "X-Client-Platform": "MacroJournal-Institutional"
+          "Accept": "application/json"
         }
       });
       
@@ -32,11 +28,9 @@ export const factoryService = {
       if (response.ok) {
         return await response.json();
       }
-      
-      throw new Error(`Factory.com responded with status: ${response.status}`);
+      throw new Error(`Factory service unreachable (${response.status})`);
     } catch (error) {
-      console.warn("Factory.com direct connection failed, falling back to AI Synthesis.", error);
-      // Fallback: Use Gemini with Google Search grounding to fulfill "latest data" requirement
+      // Fallback to Gemini synthesis which uses Google Search grounding
       return await geminiService.fetchLatestMacroData();
     }
   }

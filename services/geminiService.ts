@@ -1,24 +1,19 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { MonthlyBias, Asset, Trade, BiasType, GroundingSource } from "../types";
-import { ASSETS } from "../constants";
+import { ASSETS, INITIAL_BIASES } from "../constants";
 
-// Lazy initialization helper to prevent ReferenceErrors at boot time
 const getAI = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    console.warn("API_KEY is missing from environment variables.");
+    console.error("HLUMZARANDI: API_KEY is missing. Ensure it is set in Vercel Environment Variables.");
   }
   return new GoogleGenAI({ apiKey: apiKey || '' });
 };
 
-// In-memory cache for the current session
 const intelligenceCache: Record<string, string> = {};
 
 export const geminiService = {
-  /**
-   * Generates a plain-English explanation of why the bias is what it is.
-   */
   async explainBias(bias: MonthlyBias): Promise<string> {
     const cacheKey = `explain-${bias.id}`;
     if (intelligenceCache[cacheKey]) return intelligenceCache[cacheKey];
@@ -46,13 +41,10 @@ export const geminiService = {
       return result;
     } catch (error) {
       console.error("AI Explain Error:", error);
-      return "An error occurred while generating macro context.";
+      return "Contextual analysis temporarily unavailable.";
     }
   },
 
-  /**
-   * Provides educational feedback on a trade relative to macro bias.
-   */
   async getTradeFeedback(trade: Trade): Promise<string> {
     const cacheKey = `feedback-${trade.id}`;
     if (intelligenceCache[cacheKey]) return intelligenceCache[cacheKey];
@@ -80,26 +72,29 @@ export const geminiService = {
       return result;
     } catch (error) {
       console.error("AI Feedback Error:", error);
-      return "An error occurred while generating trade feedback.";
+      return "Performance audit interrupted. Check connection.";
     }
   },
 
-  /**
-   * Synthesizes the macro data specifically for the LAST MONTH plus absolute latest news.
-   */
   async fetchLatestMacroData(): Promise<MonthlyBias[]> {
     const ai = getAI();
     const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    const lastMonthName = d.toLocaleString('default', { month: 'long' });
-    const lastYear = d.getFullYear();
-    const lastMonthValue = `${lastYear}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+    // Use current or previous month based on date
+    const monthName = d.toLocaleString('default', { month: 'long' });
+    const year = d.getFullYear();
+    const monthValue = `${year}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
     const today = new Date().toISOString().split('T')[0];
 
     const prompt = `
-      Analyze global macroeconomic conditions as of ${today}.
-      Focus on ${lastMonthName} ${lastYear} bias and latest news for: ${ASSETS.join(', ')}.
-      Return JSON array.
+      Perform a deep-dive search on current global macroeconomic conditions as of ${today}.
+      Specifically determine the monthly fundamental bias (BULLISH, BEARISH, or NEUTRAL) for: ${ASSETS.join(', ')}.
+      
+      Focus on:
+      1. Latest Central Bank meetings (Fed, ECB, BoJ, BoE).
+      2. Recent Inflation data (CPI/PCE).
+      3. Geopolitical catalysts.
+      
+      Return a valid JSON array of objects.
     `;
 
     try {
@@ -143,24 +138,28 @@ export const geminiService = {
 
       const parsedBiases = JSON.parse(response.text || '[]');
       
+      // Extract URLs from grounding metadata as per instructions
       const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
       const sources: GroundingSource[] = groundingChunks
         .filter((c: any) => c.web)
         .map((c: any) => ({
-          title: c.web.title || "Intelligence Source",
+          title: c.web.title || "Institutional Intelligence",
           uri: c.web.uri
         }));
 
+      if (parsedBiases.length === 0) throw new Error("Empty bias array from AI");
+
       return parsedBiases.map((b: any) => ({
         ...b,
-        id: `auto-${b.asset}-${lastMonthValue}-${new Date().getHours()}`,
-        month: lastMonthValue,
-        validityPeriod: b.validityPeriod || `${lastMonthName} ${lastYear}`,
-        sources
+        id: `auto-${b.asset}-${monthValue}-${Date.now()}`,
+        month: monthValue,
+        validityPeriod: b.validityPeriod || `${monthName} ${year}`,
+        sources: sources.length > 0 ? sources : undefined
       }));
     } catch (error) {
       console.error("AI Data Fetch Error:", error);
-      throw error;
+      // If AI completely fails, return initial constants to keep app usable
+      return INITIAL_BIASES;
     }
   }
 };
